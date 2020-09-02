@@ -162,7 +162,13 @@
             [self.audioEngine stop];
             [self.recognitionRequest endAudio];
         }
-
+      
+        if(self.recognitionTask != nil ){
+            [self.recognitionTask cancel];
+            [self.recognitionTask finish];
+            self.recognitionTask = nil;
+        }
+      
         CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
     }];
