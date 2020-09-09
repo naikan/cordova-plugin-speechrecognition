@@ -42,6 +42,7 @@ public class SpeechRecognition extends CordovaPlugin {
     private static final String GET_SUPPORTED_LANGUAGES = "getSupportedLanguages";
     private static final String HAS_PERMISSION = "hasPermission";
     private static final String REQUEST_PERMISSION = "requestPermission";
+    private static final String TERMINATE_LISTENING = "terminateListening";
     private static final int MAX_RESULTS = 5;
     private static final String NOT_AVAILABLE = "Speech recognition service is not available on the system.";
     private static final String MISSING_PERMISSION = "Missing permission";
@@ -139,12 +140,17 @@ public class SpeechRecognition extends CordovaPlugin {
             }
 
             if (HAS_PERMISSION.equals(action)) {
-                hasAudioPermission();
+                cordova.getThreadPool().execute(() -> hasAudioPermission());
                 return true;
             }
 
             if (REQUEST_PERMISSION.equals(action)) {
-                requestAudioPermission();
+                cordova.getThreadPool().execute(() -> requestAudioPermission());
+                return true;
+            }
+
+            if (TERMINATE_LISTENING.equals(action)) {
+                unmute();
                 return true;
             }
 
@@ -158,6 +164,11 @@ public class SpeechRecognition extends CordovaPlugin {
 
     private boolean isRecognitionAvailable() {
         return SpeechRecognizer.isRecognitionAvailable(context);
+    }
+
+    @Override
+    public void onPause(boolean multitasking) {
+        unmute();
     }
 
     private void startListening(String language, int matches, String prompt, final Boolean showPartial, Boolean showPopup) {
@@ -194,19 +205,19 @@ public class SpeechRecognition extends CordovaPlugin {
     private void mute() {
         //mute audio
         AudioManager amanager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        amanager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_MUTE, 0);
-        amanager.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_MUTE, 0);
-        amanager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0);
-        amanager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_MUTE, 0);
+//        amanager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_MUTE, 0);
+//        amanager.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_MUTE, 0);
+//        amanager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0);
+//        amanager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_MUTE, 0);
         amanager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0);
     }
 
     private void unmute() {
         AudioManager amanager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        amanager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_UNMUTE, 0);
-        amanager.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_UNMUTE, 0);
-        amanager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
-        amanager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_UNMUTE, 0);
+//        amanager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_UNMUTE, 0);
+//        amanager.adjustStreamVolume(AudioManager.STREAM_ALARM, AudioManager.ADJUST_UNMUTE, 0);
+//        amanager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
+//        amanager.adjustStreamVolume(AudioManager.STREAM_RING, AudioManager.ADJUST_UNMUTE, 0);
         amanager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_UNMUTE, 0);
     }
 
@@ -299,7 +310,7 @@ public class SpeechRecognition extends CordovaPlugin {
 
         @Override
         public void onError(int errorCode) {
-            unmute();
+//            unmute();
             String errorMessage = getErrorText(errorCode);
             Log.d(LOG_TAG, "Error: " + errorMessage);
             callbackContext.error(errorMessage);
@@ -331,7 +342,6 @@ public class SpeechRecognition extends CordovaPlugin {
 
         @Override
         public void onReadyForSpeech(Bundle params) {
-            unmute();
             Log.d(LOG_TAG, "onReadyForSpeech");
         }
 
