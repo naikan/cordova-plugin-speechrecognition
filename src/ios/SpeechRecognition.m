@@ -119,6 +119,12 @@
             if ( error ) {
                 NSLog(@"startListening() recognitionTask error: %@", error.description);
 
+                if(self.recognitionTask != nil ){
+                    [self.recognitionTask cancel];
+                    [self.recognitionTask finish];
+                    self.recognitionTask = nil;
+                }
+
                 [self.audioEngine stop];
                 [self.audioEngine.inputNode removeTapOnBus:0];
 
