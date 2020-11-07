@@ -65,6 +65,8 @@ public class SpeechRecognition extends CordovaPlugin {
     private BluetoothAdapter btAdapter;
     private Set<BluetoothDevice> pairedDevices;
     private BluetoothHeadset btHeadset;
+    private boolean connected = false;
+    private BluetoothDevice connectedDevice;
 
     @Override
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
@@ -73,24 +75,18 @@ public class SpeechRecognition extends CordovaPlugin {
         activity = cordova.getActivity();
         context = webView.getContext();
         view = webView.getView();
-        cordova.getActivity().runOnUiThread(() -> {
+        view.post(() -> {
             setupBluetooth();
             recognizer = SpeechRecognizer.createSpeechRecognizer(activity);
             SpeechRecognitionListener listener = new SpeechRecognitionListener();
             recognizer.setRecognitionListener(listener);
         });
-//        view.post(new Runnable() {
-//            @Override
-//            public void run() {
-//                setupBluetooth();
-//                recognizer = SpeechRecognizer.createSpeechRecognizer(activity);
-//                SpeechRecognitionListener listener = new SpeechRecognitionListener();
-//                recognizer.setRecognitionListener(listener);
-//            }
-//        });
     }
 
     private void setupBluetooth() {
+        if (btAdapter != null)
+            return;
+
         btAdapter = BluetoothAdapter.getDefaultAdapter();
 
         pairedDevices = btAdapter.getBondedDevices();
@@ -99,17 +95,22 @@ public class SpeechRecognition extends CordovaPlugin {
             public void onServiceConnected(int profile, BluetoothProfile proxy) {
                 if (profile == BluetoothProfile.HEADSET) {
                     btHeadset = (BluetoothHeadset) proxy;
+                    connected = false;
                 }
             }
 
             public void onServiceDisconnected(int profile) {
                 if (profile == BluetoothProfile.HEADSET) {
+                    if (btHeadset != null && connectedDevice != null) {
+                        btHeadset.stopVoiceRecognition(connectedDevice);
+                    }
                     btHeadset = null;
+                    connectedDevice = null;
+                    connected = false;
                 }
             }
         };
         btAdapter.getProfileProxy(context, mProfileListener, BluetoothProfile.HEADSET);
-
     }
 
     @Override
@@ -158,7 +159,8 @@ public class SpeechRecognition extends CordovaPlugin {
 
             if (STOP_LISTENING.equals(action)) {
                 final CallbackContext callbackContextStop = this.callbackContext;
-                cordova.getActivity().runOnUiThread(() -> {
+
+                view.post(() -> {
                     if (recognizer != null) {
                         recognizer.stopListening();
                     }
@@ -211,15 +213,20 @@ public class SpeechRecognition extends CordovaPlugin {
     @Override
     public void onPause(boolean multitasking) {
         unmute();
+
     }
 
     private void startListening(String language, int matches, String prompt, final Boolean showPartial, Boolean showPopup) {
         Log.d(LOG_TAG, "startListening() language: " + language + ", matches: " + matches + ", prompt: " + prompt + ", showPartial: " + showPartial + ", showPopup: " + showPopup);
 
-        if (btAdapter.isEnabled()) {
+        if (!connected && btAdapter.isEnabled()) {
             for (BluetoothDevice tryDevice : pairedDevices) {
+                if (tryDevice.getBondState() == BluetoothDevice.BOND_BONDING)
+                    continue;
                 //This loop tries to start VoiceRecognition mode on every paired device until it finds one that works(which will be the currently in use bluetooth headset)
                 if (btHeadset.startVoiceRecognition(tryDevice)) {
+                    this.connectedDevice = tryDevice;
+                    this.connected = true;
                     break;
                 }
             }
@@ -244,12 +251,7 @@ public class SpeechRecognition extends CordovaPlugin {
         if (showPopup) {
             cordova.startActivityForResult(this, intent, REQUEST_CODE_SPEECH);
         } else {
-            view.post(new Runnable() {
-                @Override
-                public void run() {
-                    recognizer.startListening(intent);
-                }
-            });
+            view.post(() -> recognizer.startListening(intent));
         }
     }
 
