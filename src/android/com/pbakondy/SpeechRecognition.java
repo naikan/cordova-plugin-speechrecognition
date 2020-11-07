@@ -10,6 +10,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothHeadset;
+import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -29,6 +33,7 @@ import android.view.View;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public class SpeechRecognition extends CordovaPlugin {
 
@@ -57,6 +62,9 @@ public class SpeechRecognition extends CordovaPlugin {
     private Context context;
     private View view;
     private SpeechRecognizer recognizer;
+    private BluetoothAdapter btAdapter;
+    private Set<BluetoothDevice> pairedDevices;
+    private BluetoothHeadset btHeadset;
 
     @Override
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
@@ -65,15 +73,43 @@ public class SpeechRecognition extends CordovaPlugin {
         activity = cordova.getActivity();
         context = webView.getContext();
         view = webView.getView();
-
-        view.post(new Runnable() {
-            @Override
-            public void run() {
-                recognizer = SpeechRecognizer.createSpeechRecognizer(activity);
-                SpeechRecognitionListener listener = new SpeechRecognitionListener();
-                recognizer.setRecognitionListener(listener);
-            }
+        cordova.getActivity().runOnUiThread(() -> {
+            setupBluetooth();
+            recognizer = SpeechRecognizer.createSpeechRecognizer(activity);
+            SpeechRecognitionListener listener = new SpeechRecognitionListener();
+            recognizer.setRecognitionListener(listener);
         });
+//        view.post(new Runnable() {
+//            @Override
+//            public void run() {
+//                setupBluetooth();
+//                recognizer = SpeechRecognizer.createSpeechRecognizer(activity);
+//                SpeechRecognitionListener listener = new SpeechRecognitionListener();
+//                recognizer.setRecognitionListener(listener);
+//            }
+//        });
+    }
+
+    private void setupBluetooth() {
+        btAdapter = BluetoothAdapter.getDefaultAdapter();
+
+        pairedDevices = btAdapter.getBondedDevices();
+
+        BluetoothProfile.ServiceListener mProfileListener = new BluetoothProfile.ServiceListener() {
+            public void onServiceConnected(int profile, BluetoothProfile proxy) {
+                if (profile == BluetoothProfile.HEADSET) {
+                    btHeadset = (BluetoothHeadset) proxy;
+                }
+            }
+
+            public void onServiceDisconnected(int profile) {
+                if (profile == BluetoothProfile.HEADSET) {
+                    btHeadset = null;
+                }
+            }
+        };
+        btAdapter.getProfileProxy(context, mProfileListener, BluetoothProfile.HEADSET);
+
     }
 
     @Override
@@ -122,15 +158,21 @@ public class SpeechRecognition extends CordovaPlugin {
 
             if (STOP_LISTENING.equals(action)) {
                 final CallbackContext callbackContextStop = this.callbackContext;
-                view.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (recognizer != null) {
-                            recognizer.stopListening();
-                        }
-                        callbackContextStop.success();
+                cordova.getActivity().runOnUiThread(() -> {
+                    if (recognizer != null) {
+                        recognizer.stopListening();
                     }
+                    callbackContextStop.success();
                 });
+//                view.post(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        if (recognizer != null) {
+//                            recognizer.stopListening();
+//                        }
+//                        callbackContextStop.success();
+//                    }
+//                });
                 return true;
             }
 
@@ -173,6 +215,15 @@ public class SpeechRecognition extends CordovaPlugin {
 
     private void startListening(String language, int matches, String prompt, final Boolean showPartial, Boolean showPopup) {
         Log.d(LOG_TAG, "startListening() language: " + language + ", matches: " + matches + ", prompt: " + prompt + ", showPartial: " + showPartial + ", showPopup: " + showPopup);
+
+        if (btAdapter.isEnabled()) {
+            for (BluetoothDevice tryDevice : pairedDevices) {
+                //This loop tries to start VoiceRecognition mode on every paired device until it finds one that works(which will be the currently in use bluetooth headset)
+                if (btHeadset.startVoiceRecognition(tryDevice)) {
+                    break;
+                }
+            }
+        }
 
         final Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -324,6 +375,7 @@ public class SpeechRecognition extends CordovaPlugin {
         public void onPartialResults(Bundle bundle) {
             ArrayList<String> matches = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
             Log.d(LOG_TAG, "SpeechRecognitionListener partialResults: " + matches);
+            matches.add("partialResults");
             JSONArray matchesJSON = new JSONArray(matches);
             try {
                 if (matches != null
@@ -349,9 +401,17 @@ public class SpeechRecognition extends CordovaPlugin {
         public void onResults(Bundle results) {
             ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
             Log.d(LOG_TAG, "SpeechRecognitionListener results: " + matches);
+            matches.add("allResults");
+            JSONArray matchesJSON = new JSONArray(matches);
             try {
-                JSONArray jsonMatches = new JSONArray(matches);
-                callbackContext.success(jsonMatches);
+                if (matches != null
+                        && matches.size() > 0
+                        && !mLastPartialResults.equals(matchesJSON)) {
+                    mLastPartialResults = matchesJSON;
+                    PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, matchesJSON);
+                    pluginResult.setKeepCallback(true);
+                    callbackContext.sendPluginResult(pluginResult);
+                }
             } catch (Exception e) {
                 e.printStackTrace();
                 callbackContext.error(e.getMessage());
