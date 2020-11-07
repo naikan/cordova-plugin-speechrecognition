@@ -213,13 +213,12 @@ public class SpeechRecognition extends CordovaPlugin {
     @Override
     public void onPause(boolean multitasking) {
         unmute();
-
     }
 
     private void startListening(String language, int matches, String prompt, final Boolean showPartial, Boolean showPopup) {
         Log.d(LOG_TAG, "startListening() language: " + language + ", matches: " + matches + ", prompt: " + prompt + ", showPartial: " + showPartial + ", showPopup: " + showPopup);
 
-        if (!connected && btAdapter.isEnabled()) {
+        if (btHeadset != null && !connected && btAdapter.isEnabled()) {
             for (BluetoothDevice tryDevice : pairedDevices) {
                 //This loop tries to start VoiceRecognition mode on every paired device until it finds one that works(which will be the currently in use bluetooth headset)
                 if (btHeadset.startVoiceRecognition(tryDevice)) {
