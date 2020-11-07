@@ -221,8 +221,6 @@ public class SpeechRecognition extends CordovaPlugin {
 
         if (!connected && btAdapter.isEnabled()) {
             for (BluetoothDevice tryDevice : pairedDevices) {
-                if (tryDevice.getBondState() == BluetoothDevice.BOND_BONDING)
-                    continue;
                 //This loop tries to start VoiceRecognition mode on every paired device until it finds one that works(which will be the currently in use bluetooth headset)
                 if (btHeadset.startVoiceRecognition(tryDevice)) {
                     this.connectedDevice = tryDevice;
